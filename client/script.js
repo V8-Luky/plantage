@@ -15,10 +15,22 @@ const PLACES = [
 	"Little Italy"
 ];
 
+const LINKS = {
+	"Werkk": "http://www.werkkbeiz.ch/",
+	"Subway": "https://www.subway.com/de-CH/MenuNutrition/Menu/All",
+	"Migros TakeAway": "https://www.migros.ch/de/genossenschaften/migros-aare/angebot/gastronomie/menuplan-und-angebotsplan.html",
+	"Manito": "https://www.manito.ch/burger/",
+	"BBBRestaurant": "http://bbbaden.sv-restaurant.ch/de/menuplan/restaurant-martinsberg/",
+	"BBBistro": "http://bbbaden.sv-restaurant.ch/de/menuplan/bowls-and-rolls/",
+	"Coop Restaurant": "https://www.coop-restaurant.ch/de/menueseite.vst2524.restaurant.html"
+};
+
+const OVERLAY = document.getElementById("overlay");
 const LOGIN = document.getElementById("login");
-const USER_INPUT = document.getElementById("user-input");
+const NAME_INPUT = document.getElementById("name-input");
+const EMAIL_INPUT = document.getElementById("email-input");
 const CONFIRM = document.getElementById("confirm");
-const USER = document.getElementById("user");
+const NAME = document.getElementById("name");
 const MY_VOTE = document.getElementById("my-vote");
 const SUGGESTION = document.getElementById("suggestion");
 const SOUNDS_GOOD = document.getElementById("sounds-good");
@@ -26,21 +38,31 @@ const ALTERNATIVES = document.getElementById("alternatives");
 const MY_SUGGESTION = document.getElementById("my-suggestion");
 const SUGGEST = document.getElementById("suggest");
 
-let user = "Not logged in";
-let myVote = "No vote yet";
+let name = "";
+let token = "";
+let myVote = "";
 let suggestion = PLACES[Math.floor(Math.random() * PLACES.length)];
 
 CONFIRM.onclick = () => {
-	if (!USER_INPUT.value)
+	const name = NAME_INPUT.value;
+	const email = EMAIL_INPUT.value;
+	
+	if (!name || !email)
 		return;
 	
-	user = USER_INPUT.value;
-	localStorage.setItem("user", user);
-	LOGIN.classList.add("hidden");
-	window.onload();
+	fetch(URL + "/user", {
+		method: "POST",
+		body: JSON.stringify({ email: email,  name: name }),
+		headers: { "Content-Type": "application/json" },
+	}).then(response => {
+		if (response.status == 200)
+			LOGIN.innerText = "We've sent you an email with a confirmation link.";
+		else
+			LOGIN.innerText = "Oops! Something went wrong. Please try again later."
+	});
 }
 
-USER_INPUT.addEventListener("keydown", (event) => {
+EMAIL_INPUT.addEventListener("keydown", (event) => {
 	if (event.keyCode == 13)
 		CONFIRM.onclick();
 });
@@ -63,15 +85,30 @@ window.onload = () => {
 };
 
 function loadUser() {
-	user = localStorage.getItem("user")
-	if (!user)
-		showLogin();
-	
-	USER.innerText = user;
+	if (location.hash) {
+		localStorage.setItem("token", location.hash.substr(1));
+		location.hash = "";
+		history.replaceState("", document.title, window.location.pathname);
+	}
+
+	token = localStorage.getItem("token");
+	if (!token)
+		return showOverlay();
+
+	fetch(URL + "/user?token=" + token)
+		.then(response => response.json())
+		.then(user => {
+			name = user.name;
+			NAME.innerText = name;
+		});
 }
 
-function showLogin() {
-	LOGIN.classList.remove("hidden");
+function showOverlay() {
+	OVERLAY.classList.remove("hidden");
+}
+
+function hideOverlay() {
+	OVERLAY.classList.add("hidden");
 }
 
 function load() {
@@ -81,6 +118,7 @@ function load() {
 }
 
 function clear() {
+	myVote = "";
 	MY_VOTE.innerText = "";
 	SUGGESTION.innerText = "";
 	while (ALTERNATIVES.firstChild)
@@ -94,8 +132,8 @@ function show(votes) {
 	for (let v of votes) {
 		if (!places[v.vote])
 			places[v.vote] = [];
-		places[v.vote].push(v.user);
-		if (v.user == user) myVote = v.vote;
+		places[v.vote].push(v.name);
+		if (v.name == name) myVote = v.vote;
 	}
 
 	MY_VOTE.innerText = myVote;
@@ -113,6 +151,13 @@ function show(votes) {
 	}
 
 	SUGGESTION.innerText = suggestion;
+	if (LINKS[suggestion]) {
+		SUGGESTION.classList.add("link");
+		SUGGESTION.onclick = () => window.location = LINKS[suggestion];
+	} else {
+		SUGGESTION.classList.remove("link");
+		SUGGESTION.onclick = null;
+	}
 }
 
 function createAlternative(place, voters) {
@@ -145,8 +190,8 @@ function createAlternative(place, voters) {
 function vote(place) {
 	fetch(URL, {
 		method: "POST",
-		body: JSON.stringify({vote: place, user: user}),
-		headers: {"Content-Type": "application/json"}
+		body: JSON.stringify({ vote: place, token: token }),
+		headers: { "Content-Type": "application/json" },
 	}).then(response => {
 		load();
 	});
